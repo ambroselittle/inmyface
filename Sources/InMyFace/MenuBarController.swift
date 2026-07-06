@@ -24,7 +24,6 @@ final class MenuBarController {
     private let scheduler: MeetingScheduler
     private let calendar: CalendarService
     private let onJoin: (Meeting) -> Void
-    private let onPresent: (Meeting) -> Void
     private let icon = NSImage(systemSymbolName: "person.2.wave.2.fill",
                                accessibilityDescription: "InMyFace")
 
@@ -37,12 +36,10 @@ final class MenuBarController {
 
     init(scheduler: MeetingScheduler,
          calendar: CalendarService,
-         onJoin: @escaping (Meeting) -> Void,
-         onPresent: @escaping (Meeting) -> Void) {
+         onJoin: @escaping (Meeting) -> Void) {
         self.scheduler = scheduler
         self.calendar = calendar
         self.onJoin = onJoin
-        self.onPresent = onPresent
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         rebuild()
@@ -118,6 +115,11 @@ final class MenuBarController {
         menu.addItem(ClosureMenuItem(title: "Refresh now") { [weak self] in
             self?.scheduler.refresh()
         })
+
+        #if DEVELOPER
+        menu.addItem(developerMenuItem())
+        #endif
+
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem(title: "Quit InMyFace", keyEquivalent: "q") {
             NSApp.terminate(nil)
@@ -125,6 +127,46 @@ final class MenuBarController {
 
         statusItem.menu = menu
     }
+
+    #if DEVELOPER
+    /// Debug-only overlay previews so we can eyeball the takeover (including
+    /// the split layout) without waiting for a real meeting.
+    private func developerMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Developer", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+
+        sub.addItem(ClosureMenuItem(title: "Preview single (sample)") { [weak self] in
+            self?.scheduler.presentNow([Meeting.sample(offset: 45, joinable: true)])
+        })
+        sub.addItem(ClosureMenuItem(title: "Preview split — 2 samples") { [weak self] in
+            self?.scheduler.presentNow([
+                Meeting.sample(title: "Design Review", offset: 45, joinable: true, color: "#4C8BF5"),
+                Meeting.sample(title: "1:1 with Mauricio", offset: 45, joinable: true, color: "#34A853")
+            ])
+        })
+        sub.addItem(ClosureMenuItem(title: "Preview split — 3 samples") { [weak self] in
+            self?.scheduler.presentNow([
+                Meeting.sample(title: "Standup", offset: 45, joinable: true, color: "#4C8BF5"),
+                Meeting.sample(title: "Design Review", offset: 45, joinable: true, color: "#34A853"),
+                Meeting.sample(title: "Roadmap", offset: 45, joinable: true, color: "#EA4335")
+            ])
+        })
+
+        sub.addItem(.separator())
+        sub.addItem(ClosureMenuItem(title: "Preview next real event") { [weak self] in
+            if let next = self?.scheduler.meetings.first {
+                self?.scheduler.presentNow([next])
+            }
+        })
+        sub.addItem(ClosureMenuItem(title: "Preview next 2 real as split") { [weak self] in
+            let next = Array(self?.scheduler.meetings.prefix(2) ?? [])
+            self?.scheduler.presentNow(next)
+        })
+
+        item.submenu = sub
+        return item
+    }
+    #endif
 
     // MARK: - Building blocks
 
@@ -139,11 +181,8 @@ final class MenuBarController {
             sub.addItem(ClosureMenuItem(title: "Join now") { [weak self] in
                 self?.onJoin(meeting)
             })
+            sub.addItem(.separator())
         }
-        sub.addItem(ClosureMenuItem(title: "Show takeover now") { [weak self] in
-            self?.onPresent(meeting)
-        })
-        sub.addItem(.separator())
         let remindLabel = NSMenuItem(title: "Remind me in…", action: nil, keyEquivalent: "")
         remindLabel.isEnabled = false
         sub.addItem(remindLabel)

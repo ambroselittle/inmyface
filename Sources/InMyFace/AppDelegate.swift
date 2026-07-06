@@ -13,8 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu = MenuBarController(
             scheduler: scheduler,
             calendar: calendar,
-            onJoin: { [weak self] meeting in self?.join(meeting) },
-            onPresent: { [weak self] meeting in self?.scheduler.presentNow(meeting) }
+            onJoin: { [weak self] meeting in self?.join(meeting) }
         )
 
         // Overlay ↔ scheduler wiring.

@@ -160,8 +160,9 @@ final class MeetingScheduler {
         onRefresh?()
     }
 
-    /// Force-show a meeting immediately (menu "Show now" / testing).
-    func presentNow(_ meeting: Meeting) {
-        onPresent?([meeting])
+    /// Force-show one or more meetings immediately (developer previews).
+    func presentNow(_ meetings: [Meeting]) {
+        guard !meetings.isEmpty else { return }
+        onPresent?(meetings)
     }
 }
