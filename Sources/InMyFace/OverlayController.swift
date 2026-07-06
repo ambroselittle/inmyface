@@ -50,6 +50,10 @@ final class OverlayController {
 
         NSApp.activate(ignoringOtherApps: true)
         windows.first?.makeKeyAndOrderFront(nil)
+
+        if Preferences.soundEnabled {
+            NSSound(named: Preferences.soundName)?.play()
+        }
     }
 
     private func makeWindow(on screen: NSScreen) -> NSWindow {

@@ -11,7 +11,27 @@ enum Preferences {
         static let enabledCalendarIDs = "enabledCalendarIDs"
         static let calendarKeywords = "calendarKeywords"
         static let menubarStyle = "menubarStyle"
+        static let soundEnabled = "soundEnabled"
+        static let soundName = "soundName"
     }
+
+    /// Whether to play a sound when the takeover appears. Default on.
+    static var soundEnabled: Bool {
+        get { defaults.object(forKey: Key.soundEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.soundEnabled) }
+    }
+
+    /// Named macOS system sound played on takeover.
+    static var soundName: String {
+        get { defaults.string(forKey: Key.soundName) ?? "Glass" }
+        set { defaults.set(newValue, forKey: Key.soundName) }
+    }
+
+    /// The standard macOS system sounds (in /System/Library/Sounds).
+    static let availableSounds = [
+        "Glass", "Hero", "Ping", "Blow", "Bottle", "Frog",
+        "Funk", "Morse", "Pop", "Purr", "Sosumi", "Submarine", "Tink"
+    ]
 
     /// What the status-bar item shows. Kept minimal — most users already have
     /// the clock/date in the menu bar, so the default is just an icon.

@@ -16,6 +16,11 @@ let package = Package(
                 // release builds (what we distribute) don't.
                 .define("DEVELOPER", .when(configuration: .debug))
             ]
+        ),
+        .testTarget(
+            name: "InMyFaceTests",
+            dependencies: ["InMyFace"],
+            path: "Tests/InMyFaceTests"
         )
     ]
 )

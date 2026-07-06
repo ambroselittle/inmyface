@@ -338,6 +338,31 @@ final class MenuBarController {
 
         sub.addItem(.separator())
 
+        // Sound.
+        let soundToggle = ClosureMenuItem(title: "Play a sound on takeover") { [weak self] in
+            Preferences.soundEnabled.toggle()
+            self?.rebuild()
+        }
+        soundToggle.state = Preferences.soundEnabled ? .on : .off
+        sub.addItem(soundToggle)
+
+        let soundItem = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
+        let soundSub = NSMenu()
+        for name in Preferences.availableSounds {
+            // Selecting a sound also previews it.
+            let choice = ClosureMenuItem(title: "  \(name)") { [weak self] in
+                Preferences.soundName = name
+                NSSound(named: name)?.play()
+                self?.rebuild()
+            }
+            choice.state = (Preferences.soundName == name) ? .on : .off
+            soundSub.addItem(choice)
+        }
+        soundItem.submenu = soundSub
+        sub.addItem(soundItem)
+
+        sub.addItem(.separator())
+
         // Menu bar appearance.
         let menubarLabel = NSMenuItem(title: "Menu bar shows", action: nil, keyEquivalent: "")
         menubarLabel.isEnabled = false

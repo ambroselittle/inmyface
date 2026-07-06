@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// One-off "remind me in N minutes" nudge the user created for a meeting.
 struct CustomNudge: Identifiable {
@@ -37,8 +38,9 @@ final class MeetingScheduler {
     /// Whether a takeover is currently on screen (set by AppDelegate).
     var isOverlayVisible: () -> Bool = { false }
 
-    /// How far past start we still consider a meeting worth surfacing.
-    private let graceWindow: TimeInterval = 5 * 60
+    /// How far past start we still surface a meeting. Generous so that waking
+    /// the Mac a little after a meeting began still throws it in your face.
+    private let graceWindow: TimeInterval = 15 * 60
 
     init(calendar: CalendarService) {
         self.calendar = calendar
@@ -52,6 +54,26 @@ final class MeetingScheduler {
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+
+        // The timer is suspended while the Mac sleeps, so on wake we might have
+        // slept right through a meeting's trigger. Re-check immediately on wake
+        // (and again shortly after, once calendars have had a moment to sync).
+        let nc = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+            nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.handleWake() }
+            }
+        }
+    }
+
+    private func handleWake() {
+        refresh()
+        tick()
+        // Follow-up in case the event store hadn't synced yet on first check.
+        let t = Timer(timeInterval: 4, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.refresh(); self?.tick() }
+        }
+        RunLoop.main.add(t, forMode: .common)
     }
 
     func refresh() {
