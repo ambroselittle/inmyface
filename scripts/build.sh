@@ -9,10 +9,13 @@ CONFIG="${1:-release}"
 APP_NAME="InMyFace"
 APP="dist/${APP_NAME}.app"
 
-echo "==> Building ($CONFIG)…"
-swift build -c "$CONFIG"
+# Build a universal binary so the .app runs on both Apple Silicon and Intel.
+ARCHS=(--arch arm64 --arch x86_64)
 
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/${APP_NAME}"
+echo "==> Building ($CONFIG, universal)…"
+swift build -c "$CONFIG" "${ARCHS[@]}"
+
+BIN="$(swift build -c "$CONFIG" "${ARCHS[@]}" --show-bin-path)/${APP_NAME}"
 if [[ ! -f "$BIN" ]]; then
     echo "Build did not produce $BIN" >&2
     exit 1
