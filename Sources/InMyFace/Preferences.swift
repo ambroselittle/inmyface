@@ -9,6 +9,7 @@ enum Preferences {
         static let snoozeMinutes = "snoozeMinutes"
         static let onlyJoinable = "onlyJoinableMeetings"
         static let enabledCalendarIDs = "enabledCalendarIDs"
+        static let calendarKeywords = "calendarKeywords"
     }
 
     /// How many seconds before start the takeover appears. Default 60s.
@@ -57,5 +58,32 @@ enum Preferences {
         var set = enabledCalendarIDs ?? Set(allIDs)
         if enabled { set.insert(id) } else { set.remove(id) }
         enabledCalendarIDs = set
+    }
+
+    // MARK: - Per-calendar keyword filters
+
+    private static var keywordMap: [String: [String]] {
+        get { defaults.dictionary(forKey: Key.calendarKeywords) as? [String: [String]] ?? [:] }
+        set { defaults.set(newValue, forKey: Key.calendarKeywords) }
+    }
+
+    /// Keywords for a calendar. Empty means "alert on every event".
+    static func keywords(for id: String) -> [String] {
+        keywordMap[id] ?? []
+    }
+
+    static func setKeywords(_ words: [String], for id: String) {
+        var map = keywordMap
+        if words.isEmpty { map.removeValue(forKey: id) } else { map[id] = words }
+        keywordMap = map
+    }
+
+    /// True if this event title passes its calendar's keyword filter.
+    /// Matching is case-insensitive substring; no keywords = always passes.
+    static func titlePassesFilter(_ title: String, calendarID: String) -> Bool {
+        let words = keywords(for: calendarID)
+        guard !words.isEmpty else { return true }
+        let haystack = title.lowercased()
+        return words.contains { haystack.contains($0.lowercased()) }
     }
 }

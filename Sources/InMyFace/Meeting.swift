@@ -7,6 +7,7 @@ struct Meeting: Identifiable, Equatable {
     let title: String
     let start: Date
     let end: Date
+    let calendarID: String
     let calendarTitle: String
     let calendarColor: String // hex, best effort
     let joinURL: URL?
@@ -24,6 +25,7 @@ extension Meeting {
         self.title = (event.title?.isEmpty == false ? event.title! : "(No title)")
         self.start = start
         self.end = event.endDate ?? start.addingTimeInterval(1800)
+        self.calendarID = event.calendar?.calendarIdentifier ?? ""
         self.calendarTitle = event.calendar?.title ?? "Calendar"
         self.calendarColor = event.calendar?.color?.hexString ?? "#4C8BF5"
         self.location = event.location?.isEmpty == false ? event.location : nil

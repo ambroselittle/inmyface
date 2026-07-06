@@ -60,6 +60,7 @@ final class CalendarService {
             .filter { !$0.isAllDay }
             .filter { ($0.endDate ?? .distantPast) > now }   // hasn't fully ended
             .map(Meeting.init(event:))
+            .filter { Preferences.titlePassesFilter($0.title, calendarID: $0.calendarID) }
             .sorted { $0.start < $1.start }
     }
 }

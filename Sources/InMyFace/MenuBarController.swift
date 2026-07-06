@@ -178,19 +178,79 @@ final class MenuBarController {
                 sub.addItem(hdr)
                 lastSource = source
             }
-            let id = cal.calendarIdentifier
-            let choice = ClosureMenuItem(title: "  \(cal.title)") { [weak self] in
-                let nowOn = Preferences.isCalendarEnabled(id)
-                Preferences.setCalendar(id, enabled: !nowOn, allIDs: allIDs)
-                self?.scheduler.refresh()
-                self?.rebuild()
-            }
-            choice.state = Preferences.isCalendarEnabled(id) ? .on : .off
-            sub.addItem(choice)
+            sub.addItem(calendarItem(cal, allIDs: allIDs))
         }
 
         item.submenu = sub
         return item
+    }
+
+    /// One calendar: a submenu with an enable toggle and keyword filter.
+    private func calendarItem(_ cal: EKCalendar, allIDs: [String]) -> NSMenuItem {
+        let id = cal.calendarIdentifier
+        let enabled = Preferences.isCalendarEnabled(id)
+        let keywords = Preferences.keywords(for: id)
+
+        var title = cal.title
+        if !keywords.isEmpty { title += " — filtered" }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.state = enabled ? .on : .off
+
+        let sub = NSMenu()
+        let toggle = ClosureMenuItem(title: enabled ? "Enabled" : "Disabled") { [weak self] in
+            Preferences.setCalendar(id, enabled: !enabled, allIDs: allIDs)
+            self?.scheduler.refresh()
+            self?.rebuild()
+        }
+        toggle.state = enabled ? .on : .off
+        sub.addItem(toggle)
+
+        sub.addItem(.separator())
+        let status = NSMenuItem(
+            title: keywords.isEmpty ? "Alerts on: all events" : "Alerts on titles with: \(keywords.joined(separator: ", "))",
+            action: nil, keyEquivalent: ""
+        )
+        status.isEnabled = false
+        sub.addItem(status)
+
+        sub.addItem(ClosureMenuItem(title: "Set alert keywords…") { [weak self] in
+            self?.editKeywords(for: cal)
+        })
+        if !keywords.isEmpty {
+            sub.addItem(ClosureMenuItem(title: "Clear keywords (alert on all)") { [weak self] in
+                Preferences.setKeywords([], for: id)
+                self?.scheduler.refresh()
+                self?.rebuild()
+            })
+        }
+
+        item.submenu = sub
+        return item
+    }
+
+    /// Prompt for comma-separated keywords for a calendar.
+    private func editKeywords(for cal: EKCalendar) {
+        let alert = NSAlert()
+        alert.messageText = "Alert keywords for “\(cal.title)”"
+        alert.informativeText = "Only events whose title contains one of these words will alert. Separate with commas. Leave blank to alert on all events in this calendar."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.stringValue = Preferences.keywords(for: cal.calendarIdentifier).joined(separator: ", ")
+        field.placeholderString = "e.g. Dad, Ambrose"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        NSApp.activate(ignoringOtherApps: true)
+        alert.window.makeFirstResponder(field)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let words = field.stringValue
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        Preferences.setKeywords(words, for: cal.calendarIdentifier)
+        scheduler.refresh()
+        rebuild()
     }
 
     private func settingsMenuItem() -> NSMenuItem {
