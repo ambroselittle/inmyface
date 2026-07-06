@@ -25,6 +25,12 @@ final class MenuBarController {
     private let calendar: CalendarService
     private let onJoin: (Meeting) -> Void
     private let onPresent: (Meeting) -> Void
+    private let icon = NSImage(systemSymbolName: "person.2.wave.2.fill",
+                               accessibilityDescription: "InMyFace")
+
+    /// A meeting starting within this window counts as "near" for the
+    /// minutes-when-imminent menubar style.
+    private let imminentWindow: TimeInterval = 15 * 60
 
     /// Offer these as quick "remind me in N min" choices.
     private let nudgeChoices = [1, 5, 10, 15, 30]
@@ -39,11 +45,6 @@ final class MenuBarController {
         self.onPresent = onPresent
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "person.2.wave.2.fill",
-                                   accessibilityDescription: "InMyFace")
-            button.imagePosition = .imageLeading
-        }
         rebuild()
     }
 
@@ -296,6 +297,21 @@ final class MenuBarController {
         onlyJoinable.state = Preferences.onlyJoinable ? .on : .off
         sub.addItem(onlyJoinable)
 
+        sub.addItem(.separator())
+
+        // Menu bar appearance.
+        let menubarLabel = NSMenuItem(title: "Menu bar shows", action: nil, keyEquivalent: "")
+        menubarLabel.isEnabled = false
+        sub.addItem(menubarLabel)
+        for style in Preferences.MenubarStyle.allCases {
+            let choice = ClosureMenuItem(title: "  \(style.label)") { [weak self] in
+                Preferences.menubarStyle = style
+                self?.rebuild()
+            }
+            choice.state = (Preferences.menubarStyle == style) ? .on : .off
+            sub.addItem(choice)
+        }
+
         item.submenu = sub
         return item
     }
@@ -304,10 +320,25 @@ final class MenuBarController {
 
     private func updateStatusTitle() {
         guard let button = statusItem.button else { return }
-        if let next = scheduler.meetings.first {
-            button.title = " " + TimeFormat.menubar(to: next.start)
-        } else {
+        button.imagePosition = .imageLeading
+
+        switch Preferences.menubarStyle {
+        case .iconOnly:
+            button.image = icon
             button.title = ""
+        case .dayOfMonth:
+            // Just the date number, no icon — compact, In-Your-Face style.
+            button.image = nil
+            button.title = "\(Calendar.current.component(.day, from: Date()))"
+        case .imminentMinutes:
+            button.image = icon
+            if let next = scheduler.meetings.first,
+               next.start.timeIntervalSinceNow > 0,
+               next.start.timeIntervalSinceNow <= imminentWindow {
+                button.title = " " + TimeFormat.menubar(to: next.start)
+            } else {
+                button.title = ""
+            }
         }
     }
 

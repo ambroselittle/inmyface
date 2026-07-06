@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Overlay ↔ scheduler wiring.
         scheduler.isOverlayVisible = { [weak self] in self?.overlay.isVisible ?? false }
         scheduler.onRefresh = { [weak self] in self?.menu.rebuild() }
-        scheduler.onPresent = { [weak self] meeting in self?.showTakeover(for: meeting) }
+        scheduler.onPresent = { [weak self] meetings in self?.showTakeover(for: meetings) }
 
         Task { @MainActor in
             if calendar.access == .notDetermined {
@@ -31,19 +31,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showTakeover(for meeting: Meeting) {
+    private func showTakeover(for meetings: [Meeting]) {
         overlay.present(
-            meeting: meeting,
+            meetings: meetings,
             snoozeMinutes: Preferences.snoozeMinutes,
-            onJoin: { [weak self] in
+            onJoin: { [weak self] meeting in
                 self?.join(meeting)
-                self?.scheduler.dismiss(meeting)
+                meetings.forEach { self?.scheduler.dismiss($0) }
             },
             onSnooze: { [weak self] in
-                self?.scheduler.snooze(meeting, minutes: Preferences.snoozeMinutes)
+                meetings.forEach { self?.scheduler.snooze($0, minutes: Preferences.snoozeMinutes) }
             },
             onDismiss: { [weak self] in
-                self?.scheduler.dismiss(meeting)
+                meetings.forEach { self?.scheduler.dismiss($0) }
             }
         )
     }

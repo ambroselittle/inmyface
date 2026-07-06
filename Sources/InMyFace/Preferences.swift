@@ -10,6 +10,28 @@ enum Preferences {
         static let onlyJoinable = "onlyJoinableMeetings"
         static let enabledCalendarIDs = "enabledCalendarIDs"
         static let calendarKeywords = "calendarKeywords"
+        static let menubarStyle = "menubarStyle"
+    }
+
+    /// What the status-bar item shows. Kept minimal — most users already have
+    /// the clock/date in the menu bar, so the default is just an icon.
+    enum MenubarStyle: String, CaseIterable {
+        case iconOnly          // just the icon, no text
+        case imminentMinutes   // icon; adds minutes only when a meeting is close
+        case dayOfMonth        // today's date number, In-Your-Face style
+
+        var label: String {
+            switch self {
+            case .iconOnly: return "Icon only"
+            case .imminentMinutes: return "Minutes (only when meeting is near)"
+            case .dayOfMonth: return "Day of month"
+            }
+        }
+    }
+
+    static var menubarStyle: MenubarStyle {
+        get { MenubarStyle(rawValue: defaults.string(forKey: Key.menubarStyle) ?? "") ?? .iconOnly }
+        set { defaults.set(newValue.rawValue, forKey: Key.menubarStyle) }
     }
 
     /// How many seconds before start the takeover appears. Default 60s.

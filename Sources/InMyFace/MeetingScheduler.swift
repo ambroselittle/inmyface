@@ -20,12 +20,18 @@ final class MeetingScheduler {
     // Trigger bookkeeping, keyed by Meeting.id (per-occurrence).
     private var dismissedIDs: Set<String> = []
     private var snoozedUntil: [String: Date] = [:]
-    private var lastPresentedID: String?
 
     private(set) var customNudges: [CustomNudge] = []
 
-    /// Called when a meeting should be shown full-screen.
-    var onPresent: ((Meeting) -> Void)?
+    /// Called when one or more meetings should be shown full-screen. More than
+    /// one means genuinely-distinct meetings start at the same time.
+    var onPresent: (([Meeting]) -> Void)?
+
+    /// How close two start times must be to count as "the same slot".
+    private let concurrencyTolerance: TimeInterval = 120
+
+    /// Cap on how many meetings we split the takeover across.
+    private let maxConcurrent = 3
     /// Called after the meeting list refreshes, so the menu can redraw.
     var onRefresh: (() -> Void)?
     /// Whether a takeover is currently on screen (set by AppDelegate).
@@ -67,8 +73,7 @@ final class MeetingScheduler {
         // 1. Custom "remind me in N" nudges take priority.
         if let idx = customNudges.firstIndex(where: { $0.fireDate <= now }) {
             let nudge = customNudges.remove(at: idx)
-            lastPresentedID = nudge.meeting.id
-            onPresent?(nudge.meeting)
+            onPresent?([nudge.meeting])
             onRefresh?()
             return
         }
@@ -83,10 +88,52 @@ final class MeetingScheduler {
             if Preferences.onlyJoinable && !m.isJoinable { return false }
             return true
         }
-        if let next = eligible.min(by: { $0.start < $1.start }) {
-            lastPresentedID = next.id
-            onPresent?(next)
+        if let trigger = eligible.min(by: { $0.start < $1.start }) {
+            onPresent?(concurrentGroup(around: trigger, in: eligible))
         }
+    }
+
+    /// Meetings starting at the same time as `trigger`, deduped and reduced to
+    /// the one(s) worth showing. Collapses duplicates that appear on two
+    /// calendars, and prefers the copy that actually has a join link.
+    private func concurrentGroup(around trigger: Meeting, in eligible: [Meeting]) -> [Meeting] {
+        let sameSlot = eligible
+            .filter { abs($0.start.timeIntervalSince(trigger.start)) <= concurrencyTolerance }
+            .sorted { $0.start < $1.start }
+
+        // Collapse identical join URLs (same meeting invited to two calendars).
+        var seenURL = Set<String>()
+        var byURL: [Meeting] = []
+        for m in sameSlot {
+            if let key = m.joinURL?.absoluteString.lowercased() {
+                if seenURL.contains(key) { continue }
+                seenURL.insert(key)
+            }
+            byURL.append(m)
+        }
+
+        // Collapse identical titles, keeping the joinable copy if there is one
+        // (e.g. a work "block" placeholder vs the real invite on another cal).
+        var byTitleOrder: [String] = []
+        var byTitle: [String: Meeting] = [:]
+        for m in byURL {
+            let key = m.title.lowercased().trimmingCharacters(in: .whitespaces)
+            if let existing = byTitle[key] {
+                if !existing.isJoinable && m.isJoinable { byTitle[key] = m }
+            } else {
+                byTitle[key] = m
+                byTitleOrder.append(key)
+            }
+        }
+        var collapsed = byTitleOrder.compactMap { byTitle[$0] }
+
+        // If any survivor is joinable, drop the link-less ones — they're almost
+        // always the placeholder for the same slot.
+        if collapsed.contains(where: { $0.isJoinable }) {
+            collapsed = collapsed.filter { $0.isJoinable }
+        }
+
+        return Array(collapsed.prefix(maxConcurrent))
     }
 
     // MARK: - User actions from the overlay
@@ -115,6 +162,6 @@ final class MeetingScheduler {
 
     /// Force-show a meeting immediately (menu "Show now" / testing).
     func presentNow(_ meeting: Meeting) {
-        onPresent?(meeting)
+        onPresent?([meeting])
     }
 }
