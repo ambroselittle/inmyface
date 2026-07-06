@@ -87,20 +87,14 @@ struct OverlayView: View {
     }
 
     private var startLine: String {
-        let mins = meeting.minutesUntilStart
-        let df = DateFormatter()
-        df.timeStyle = .short
-        let at = df.string(from: meeting.start)
-        if mins > 0 { return "Starts in \(mins) min · \(at)" }
-        if mins == 0 { return "Starting now · \(at)" }
-        return "Started \(-mins) min ago · \(at)"
+        let at = TimeFormat.clock(meeting.start)
+        let rel = TimeFormat.relative(to: meeting.start)
+        if rel == "now" { return "Starting now · \(at)" }
+        return "Starts \(rel) · \(at)"
     }
 
     private var countdown: String {
-        let secs = Int(meeting.start.timeIntervalSinceNow)
-        let sign = secs < 0 ? "-" : ""
-        let a = abs(secs)
-        return String(format: "%@%02d:%02d", sign, a / 60, a % 60)
+        TimeFormat.countdown(to: meeting.start)
     }
 }
 

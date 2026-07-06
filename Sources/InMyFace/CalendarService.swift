@@ -32,15 +32,29 @@ final class CalendarService {
         }
     }
 
+    /// All event calendars the user has in Calendar.app, grouped-friendly:
+    /// sorted by account/source name, then calendar title.
+    func allCalendars() -> [EKCalendar] {
+        guard access == .granted else { return [] }
+        return store.calendars(for: .event).sorted {
+            let a = ($0.source?.title ?? "", $0.title)
+            let b = ($1.source?.title ?? "", $1.title)
+            return a < b
+        }
+    }
+
     /// Upcoming meetings within the given window (default: next 24h),
-    /// sorted by start time, all-day events excluded.
+    /// sorted by start time, all-day events excluded, limited to the
+    /// calendars the user has enabled.
     func upcomingMeetings(within hours: Double = 24) -> [Meeting] {
         guard access == .granted else { return [] }
+        let enabled = allCalendars().filter { Preferences.isCalendarEnabled($0.calendarIdentifier) }
+        guard !enabled.isEmpty else { return [] }
         let now = Date()
         let end = now.addingTimeInterval(hours * 3600)
         let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-300),
                                                  end: end,
-                                                 calendars: nil)
+                                                 calendars: enabled)
         let events = store.events(matching: predicate)
         return events
             .filter { !$0.isAllDay }

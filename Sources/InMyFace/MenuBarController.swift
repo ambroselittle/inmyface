@@ -1,4 +1,5 @@
 import AppKit
+import EventKit
 
 /// NSMenuItem that runs a closure when clicked. Saves wiring up target/action
 /// selectors for every dynamic item.
@@ -107,8 +108,9 @@ final class MenuBarController {
             }
         }
 
-        // Settings.
+        // Calendars + Settings.
         menu.addItem(.separator())
+        menu.addItem(calendarsMenuItem())
         menu.addItem(settingsMenuItem())
 
         // Refresh + Quit.
@@ -149,6 +151,44 @@ final class MenuBarController {
                 self?.scheduler.addCustomNudge(for: meeting, minutes: m)
             })
         }
+        item.submenu = sub
+        return item
+    }
+
+    private func calendarsMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Calendars", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+
+        let cals = calendar.allCalendars()
+        let allIDs = cals.map(\.calendarIdentifier)
+
+        if cals.isEmpty {
+            let empty = NSMenuItem(title: "No calendars found", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            sub.addItem(empty)
+        }
+
+        var lastSource: String?
+        for cal in cals {
+            let source = cal.source?.title ?? "Other"
+            if source != lastSource {
+                if lastSource != nil { sub.addItem(.separator()) }
+                let hdr = NSMenuItem(title: source, action: nil, keyEquivalent: "")
+                hdr.isEnabled = false
+                sub.addItem(hdr)
+                lastSource = source
+            }
+            let id = cal.calendarIdentifier
+            let choice = ClosureMenuItem(title: "  \(cal.title)") { [weak self] in
+                let nowOn = Preferences.isCalendarEnabled(id)
+                Preferences.setCalendar(id, enabled: !nowOn, allIDs: allIDs)
+                self?.scheduler.refresh()
+                self?.rebuild()
+            }
+            choice.state = Preferences.isCalendarEnabled(id) ? .on : .off
+            sub.addItem(choice)
+        }
+
         item.submenu = sub
         return item
     }
@@ -205,35 +245,17 @@ final class MenuBarController {
     private func updateStatusTitle() {
         guard let button = statusItem.button else { return }
         if let next = scheduler.meetings.first {
-            let mins = next.minutesUntilStart
-            if mins <= 0 {
-                button.title = " now"
-            } else if mins < 60 {
-                button.title = " \(mins)m"
-            } else {
-                button.title = " \(mins / 60)h\(mins % 60)m"
-            }
+            button.title = " " + TimeFormat.menubar(to: next.start)
         } else {
             button.title = ""
         }
     }
 
-    private func timeString(_ date: Date) -> String {
-        let df = DateFormatter()
-        df.timeStyle = .short
-        return df.string(from: date)
-    }
-
     private func meetingLabel(_ meeting: Meeting) -> String {
-        "\(timeString(meeting.start))  ·  \(meeting.title)"
+        "\(TimeFormat.clock(meeting.start))  ·  \(meeting.title)"
     }
 
     private func nextHeader(_ meeting: Meeting) -> String {
-        let mins = meeting.minutesUntilStart
-        let rel: String
-        if mins <= 0 { rel = "now" }
-        else if mins < 60 { rel = "in \(mins) min" }
-        else { rel = "in \(mins / 60)h \(mins % 60)m" }
-        return "Next: \(meeting.title) — \(rel)"
+        "Next: \(meeting.title) — \(TimeFormat.relative(to: meeting.start))"
     }
 }

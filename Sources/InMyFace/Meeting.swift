@@ -14,11 +14,6 @@ struct Meeting: Identifiable, Equatable {
 
     var isJoinable: Bool { joinURL != nil }
 
-    /// Minutes from now until the meeting starts (negative if already started).
-    var minutesUntilStart: Int {
-        Int((start.timeIntervalSinceNow / 60).rounded())
-    }
-
     static func == (lhs: Meeting, rhs: Meeting) -> Bool { lhs.id == rhs.id }
 }
 
