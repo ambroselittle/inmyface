@@ -14,6 +14,7 @@ final class KeyableWindow: NSWindow {
 @MainActor
 final class OverlayController {
     private var windows: [NSWindow] = []
+    private var keyMonitor: Any?
     private(set) var isVisible = false
 
     func present(meetings: [Meeting],
@@ -51,6 +52,22 @@ final class OverlayController {
         NSApp.activate(ignoringOtherApps: true)
         windows.first?.makeKeyAndOrderFront(nil)
 
+        // Capture Esc (dismiss) and Return (join primary) at the AppKit level —
+        // more reliable than SwiftUI focus on a borderless takeover window.
+        let primaryMeeting = meetings.first(where: { $0.isJoinable })
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.isVisible else { return event }
+            switch event.keyCode {
+            case 53: // Escape
+                self.close(); onDismiss(); return nil
+            case 36, 76: // Return / keypad Enter
+                if let primaryMeeting { self.close(); onJoin(primaryMeeting); return nil }
+                return event
+            default:
+                return event
+            }
+        }
+
         if Preferences.soundEnabled {
             NSSound(named: Preferences.soundName)?.play()
         }
@@ -78,6 +95,7 @@ final class OverlayController {
     func close() {
         guard isVisible else { return }
         isVisible = false
+        if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
         for w in windows { w.orderOut(nil) }
         windows.removeAll()
     }

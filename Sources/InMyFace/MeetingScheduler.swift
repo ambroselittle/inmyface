@@ -44,6 +44,7 @@ final class MeetingScheduler {
 
     init(calendar: CalendarService) {
         self.calendar = calendar
+        self.dismissedIDs = Preferences.dismissedMeetingIDs
     }
 
     func start() {
@@ -78,12 +79,27 @@ final class MeetingScheduler {
 
     func refresh() {
         meetings = calendar.upcomingMeetings(within: 24)
-        // Drop stale bookkeeping for meetings no longer in the window.
+        pruneDismissed()
+        // Snooze is transient; drop it for meetings no longer in the window.
         let live = Set(meetings.map(\.id))
-        dismissedIDs.formIntersection(live)
         snoozedUntil = snoozedUntil.filter { live.contains($0.key) }
         customNudges.removeAll { $0.fireDate < Date().addingTimeInterval(-graceWindow) }
         onRefresh?()
+    }
+
+    /// Drop acted-on IDs whose occurrence is more than a day old, so the
+    /// persisted set can't grow forever. The start epoch is the trailing
+    /// segment of the id ("<eventId>@<epoch>").
+    private func pruneDismissed() {
+        let cutoff = Date().addingTimeInterval(-86_400).timeIntervalSince1970
+        let kept = dismissedIDs.filter { id in
+            guard let tail = id.split(separator: "@").last, let epoch = Double(tail) else { return true }
+            return epoch >= cutoff
+        }
+        if kept != dismissedIDs {
+            dismissedIDs = kept
+            Preferences.dismissedMeetingIDs = dismissedIDs
+        }
     }
 
     private func tick() {
@@ -162,6 +178,7 @@ final class MeetingScheduler {
 
     func dismiss(_ meeting: Meeting) {
         dismissedIDs.insert(meeting.id)
+        Preferences.dismissedMeetingIDs = dismissedIDs
     }
 
     func snooze(_ meeting: Meeting, minutes: Int) {

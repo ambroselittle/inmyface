@@ -13,6 +13,15 @@ enum Preferences {
         static let menubarStyle = "menubarStyle"
         static let soundEnabled = "soundEnabled"
         static let soundName = "soundName"
+        static let dismissedMeetingIDs = "dismissedMeetingIDs"
+    }
+
+    /// Per-occurrence meeting IDs the user has already acted on (joined or
+    /// dismissed), persisted so a restart or rebuild doesn't re-nag about a
+    /// meeting that's still within its grace window.
+    static var dismissedMeetingIDs: Set<String> {
+        get { Set(defaults.stringArray(forKey: Key.dismissedMeetingIDs) ?? []) }
+        set { defaults.set(Array(newValue), forKey: Key.dismissedMeetingIDs) }
     }
 
     /// Whether to play a sound when the takeover appears. Default on.
