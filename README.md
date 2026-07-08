@@ -2,9 +2,9 @@
 
 A tiny macOS menubar app that throws your next meeting **in your face** — a
 full-screen takeover across every display with **Join**, **Snooze**, and
-**Dismiss**. Plus the feature the original [In Your Face](https://www.inyourface.app/)
-doesn't have: pick any upcoming meeting and set a **"remind me in N minutes"**
-nudge.
+**Dismiss**. Inspired by [In Your Face](https://www.inyourface.app/). It's a 
+slimmed down, bare bones, vibe coded option. If you want more fully featured,
+that's a good one!
 
 Reads your calendars through macOS's native EventKit, so any calendar you've
 added to **Calendar.app** — including your Google work calendar — just works.
