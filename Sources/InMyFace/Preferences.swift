@@ -1,53 +1,55 @@
 import Foundation
 
-/// Lightweight UserDefaults-backed settings.
+/// Settings facade. Shareable settings are backed by a JSON `Config` file in
+/// iCloud Drive (see `ConfigStore`); machine-local runtime state stays in
+/// UserDefaults.
 enum Preferences {
     private static let defaults = UserDefaults.standard
 
-    enum Key {
-        static let leadTimeSeconds = "leadTimeSeconds"
-        static let snoozeMinutes = "snoozeMinutes"
-        static let onlyJoinable = "onlyJoinableMeetings"
-        static let enabledCalendarIDs = "enabledCalendarIDs"
-        static let calendarKeywords = "calendarKeywords"
-        static let menubarStyle = "menubarStyle"
-        static let soundEnabled = "soundEnabled"
-        static let soundName = "soundName"
-        static let dismissedMeetingIDs = "dismissedMeetingIDs"
+    /// In-memory copy of the shared config, written through on every change.
+    private static var config = ConfigStore.load()
+
+    private static func mutate(_ change: (inout Config) -> Void) {
+        change(&config)
+        ConfigStore.save(config)
     }
 
-    /// Per-occurrence meeting IDs the user has already acted on (joined or
-    /// dismissed), persisted so a restart or rebuild doesn't re-nag about a
-    /// meeting that's still within its grace window.
-    static var dismissedMeetingIDs: Set<String> {
-        get { Set(defaults.stringArray(forKey: Key.dismissedMeetingIDs) ?? []) }
-        set { defaults.set(Array(newValue), forKey: Key.dismissedMeetingIDs) }
+    /// Replace the whole config (used by migration) and persist it.
+    static func replaceConfig(_ newConfig: Config) {
+        config = newConfig
+        ConfigStore.save(config)
     }
 
-    /// Whether to play a sound when the takeover appears. Default on.
-    static var soundEnabled: Bool {
-        get { defaults.object(forKey: Key.soundEnabled) as? Bool ?? true }
-        set { defaults.set(newValue, forKey: Key.soundEnabled) }
+    static var currentConfig: Config { config }
+
+    // MARK: - Timing / behavior
+
+    static var leadTimeSeconds: Int {
+        get { config.leadTimeSeconds }
+        set { mutate { $0.leadTimeSeconds = newValue } }
     }
 
-    /// Named macOS system sound played on takeover.
-    static var soundName: String {
-        get { defaults.string(forKey: Key.soundName) ?? "Glass" }
-        set { defaults.set(newValue, forKey: Key.soundName) }
+    static var snoozeMinutes: Int {
+        get { config.snoozeMinutes }
+        set { mutate { $0.snoozeMinutes = newValue } }
     }
 
-    /// The standard macOS system sounds (in /System/Library/Sounds).
-    static let availableSounds = [
-        "Glass", "Hero", "Ping", "Blow", "Bottle", "Frog",
-        "Funk", "Morse", "Pop", "Purr", "Sosumi", "Submarine", "Tink"
-    ]
+    static var onlyJoinable: Bool {
+        get { config.onlyJoinable }
+        set { mutate { $0.onlyJoinable = newValue } }
+    }
 
-    /// What the status-bar item shows. Kept minimal — most users already have
-    /// the clock/date in the menu bar, so the default is just an icon.
+    static var launchAtLogin: Bool {
+        get { config.launchAtLogin }
+        set { mutate { $0.launchAtLogin = newValue } }
+    }
+
+    // MARK: - Menu bar appearance
+
     enum MenubarStyle: String, CaseIterable {
-        case iconOnly          // just the icon, no text
-        case imminentMinutes   // icon; adds minutes only when a meeting is close
-        case dayOfMonth        // today's date number, In-Your-Face style
+        case iconOnly
+        case imminentMinutes
+        case dayOfMonth
 
         var label: String {
             switch self {
@@ -59,82 +61,81 @@ enum Preferences {
     }
 
     static var menubarStyle: MenubarStyle {
-        get { MenubarStyle(rawValue: defaults.string(forKey: Key.menubarStyle) ?? "") ?? .iconOnly }
-        set { defaults.set(newValue.rawValue, forKey: Key.menubarStyle) }
+        get { MenubarStyle(rawValue: config.menubarStyle) ?? .iconOnly }
+        set { mutate { $0.menubarStyle = newValue.rawValue } }
     }
 
-    /// How many seconds before start the takeover appears. Default 60s.
-    static var leadTimeSeconds: Int {
-        get { defaults.object(forKey: Key.leadTimeSeconds) as? Int ?? 60 }
-        set { defaults.set(newValue, forKey: Key.leadTimeSeconds) }
+    // MARK: - Sound
+
+    static var soundEnabled: Bool {
+        get { config.soundEnabled }
+        set { mutate { $0.soundEnabled = newValue } }
     }
 
-    /// Default snooze length in minutes. Default 5.
-    static var snoozeMinutes: Int {
-        get { defaults.object(forKey: Key.snoozeMinutes) as? Int ?? 5 }
-        set { defaults.set(newValue, forKey: Key.snoozeMinutes) }
+    static var soundName: String {
+        get { config.soundName }
+        set { mutate { $0.soundName = newValue } }
     }
 
-    /// If true, only meetings that have a join link trigger the takeover.
-    static var onlyJoinable: Bool {
-        get { defaults.object(forKey: Key.onlyJoinable) as? Bool ?? false }
-        set { defaults.set(newValue, forKey: Key.onlyJoinable) }
+    static let availableSounds = [
+        "Glass", "Hero", "Ping", "Blow", "Bottle", "Frog",
+        "Funk", "Morse", "Pop", "Purr", "Sosumi", "Submarine", "Tink"
+    ]
+
+    // MARK: - Calendars (keyed by a stable "account › name" key)
+
+    /// Stable, cross-machine key for a calendar. EventKit's calendarIdentifier
+    /// differs per Mac, so we key on the account/source title plus the calendar
+    /// title instead.
+    static func calendarKey(source: String?, title: String) -> String {
+        "\(source ?? "Other")›\(title)"
     }
 
-    /// Calendar identifiers the user has explicitly enabled. `nil` means the
-    /// user hasn't chosen yet — treat every calendar as enabled until they do.
-    static var enabledCalendarIDs: Set<String>? {
-        get {
-            guard let arr = defaults.array(forKey: Key.enabledCalendarIDs) as? [String] else { return nil }
-            return Set(arr)
+    /// Enabled unless explicitly disabled. New/other-machine calendars default
+    /// on, which is what makes a shared config behave sensibly.
+    static func isCalendarEnabled(_ key: String) -> Bool {
+        !config.disabledCalendars.contains(key)
+    }
+
+    static func setCalendar(_ key: String, enabled: Bool) {
+        mutate {
+            var disabled = Set($0.disabledCalendars)
+            if enabled { disabled.remove(key) } else { disabled.insert(key) }
+            $0.disabledCalendars = Array(disabled).sorted()
         }
-        set {
-            if let set = newValue {
-                defaults.set(Array(set), forKey: Key.enabledCalendarIDs)
-            } else {
-                defaults.removeObject(forKey: Key.enabledCalendarIDs)
-            }
+    }
+
+    static func keywords(for key: String) -> [String] {
+        config.calendarKeywords[key] ?? []
+    }
+
+    static func setKeywords(_ words: [String], for key: String) {
+        mutate {
+            if words.isEmpty { $0.calendarKeywords.removeValue(forKey: key) }
+            else { $0.calendarKeywords[key] = words }
         }
-    }
-
-    /// Whether a given calendar should be included. Unset preference = all on.
-    static func isCalendarEnabled(_ id: String) -> Bool {
-        guard let enabled = enabledCalendarIDs else { return true }
-        return enabled.contains(id)
-    }
-
-    /// Turn one calendar on/off. Seeds the set from `allIDs` the first time so
-    /// toggling one calendar off doesn't silently disable every other.
-    static func setCalendar(_ id: String, enabled: Bool, allIDs: [String]) {
-        var set = enabledCalendarIDs ?? Set(allIDs)
-        if enabled { set.insert(id) } else { set.remove(id) }
-        enabledCalendarIDs = set
-    }
-
-    // MARK: - Per-calendar keyword filters
-
-    private static var keywordMap: [String: [String]] {
-        get { defaults.dictionary(forKey: Key.calendarKeywords) as? [String: [String]] ?? [:] }
-        set { defaults.set(newValue, forKey: Key.calendarKeywords) }
-    }
-
-    /// Keywords for a calendar. Empty means "alert on every event".
-    static func keywords(for id: String) -> [String] {
-        keywordMap[id] ?? []
-    }
-
-    static func setKeywords(_ words: [String], for id: String) {
-        var map = keywordMap
-        if words.isEmpty { map.removeValue(forKey: id) } else { map[id] = words }
-        keywordMap = map
     }
 
     /// True if this event title passes its calendar's keyword filter.
-    /// Matching is case-insensitive substring; no keywords = always passes.
-    static func titlePassesFilter(_ title: String, calendarID: String) -> Bool {
-        let words = keywords(for: calendarID)
-        guard !words.isEmpty else { return true }
+    static func titlePassesFilter(_ title: String, calendarKey: String) -> Bool {
+        titleMatches(title, keywords: keywords(for: calendarKey))
+    }
+
+    /// Case-insensitive substring match; empty keywords always passes.
+    static func titleMatches(_ title: String, keywords: [String]) -> Bool {
+        guard !keywords.isEmpty else { return true }
         let haystack = title.lowercased()
-        return words.contains { haystack.contains($0.lowercased()) }
+        return keywords.contains { haystack.contains($0.lowercased()) }
+    }
+
+    // MARK: - Local runtime state (not shared)
+
+    enum LocalKey {
+        static let dismissedMeetingIDs = "dismissedMeetingIDs"
+    }
+
+    static var dismissedMeetingIDs: Set<String> {
+        get { Set(defaults.stringArray(forKey: LocalKey.dismissedMeetingIDs) ?? []) }
+        set { defaults.set(Array(newValue), forKey: LocalKey.dismissedMeetingIDs) }
     }
 }

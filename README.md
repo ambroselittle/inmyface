@@ -68,6 +68,25 @@ of when the meeting actually starts.
 | `MenuBarController.swift` | The status-bar menu |
 | `AppDelegate.swift` | Wires it all together |
 
-## Start at login (optional)
+## Settings & sharing across Macs
 
-System Settings → General → Login Items → add `InMyFace.app`.
+Shareable settings (timing, sound, menu-bar style, launch-at-login, and your
+per-calendar enable/keyword choices) are stored as JSON at:
+
+```
+~/Library/Mobile Documents/com~apple~CloudDocs/settings/inmyface.json
+```
+
+(falls back to `~/Library/Application Support/InMyFace/` if iCloud Drive isn't
+present). Because it lives in iCloud Drive, the same config follows you to
+another Mac automatically. Calendar settings are keyed by *account › calendar
+name* (not the machine-local identifier) and stored as a **disabled** list, so
+a calendar that only exists on the other Mac stays enabled by default there.
+
+Machine-local runtime state (which meetings you've already dismissed) is kept
+separately in UserDefaults and is *not* shared.
+
+## Launch at login
+
+Toggle **Settings → Launch at login** in the menu (registers via
+`SMAppService`). No need to add it manually in System Settings.

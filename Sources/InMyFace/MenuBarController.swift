@@ -211,7 +211,6 @@ final class MenuBarController {
         let sub = NSMenu()
 
         let cals = calendar.allCalendars()
-        let allIDs = cals.map(\.calendarIdentifier)
 
         if cals.isEmpty {
             let empty = NSMenuItem(title: "No calendars found", action: nil, keyEquivalent: "")
@@ -229,16 +228,20 @@ final class MenuBarController {
                 sub.addItem(hdr)
                 lastSource = source
             }
-            sub.addItem(calendarItem(cal, allIDs: allIDs))
+            sub.addItem(calendarItem(cal))
         }
 
         item.submenu = sub
         return item
     }
 
+    private func key(for cal: EKCalendar) -> String {
+        Preferences.calendarKey(source: cal.source?.title, title: cal.title)
+    }
+
     /// One calendar: a submenu with an enable toggle and keyword filter.
-    private func calendarItem(_ cal: EKCalendar, allIDs: [String]) -> NSMenuItem {
-        let id = cal.calendarIdentifier
+    private func calendarItem(_ cal: EKCalendar) -> NSMenuItem {
+        let id = key(for: cal)
         let enabled = Preferences.isCalendarEnabled(id)
         let keywords = Preferences.keywords(for: id)
 
@@ -249,7 +252,7 @@ final class MenuBarController {
 
         let sub = NSMenu()
         let toggle = ClosureMenuItem(title: enabled ? "Enabled" : "Disabled") { [weak self] in
-            Preferences.setCalendar(id, enabled: !enabled, allIDs: allIDs)
+            Preferences.setCalendar(id, enabled: !enabled)
             self?.scheduler.refresh()
             self?.rebuild()
         }
@@ -285,7 +288,7 @@ final class MenuBarController {
         alert.messageText = "Alert keywords for “\(cal.title)”"
         alert.informativeText = "Only events whose title contains one of these words will alert. Separate with commas. Leave blank to alert on all events in this calendar."
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        field.stringValue = Preferences.keywords(for: cal.calendarIdentifier).joined(separator: ", ")
+        field.stringValue = Preferences.keywords(for: key(for: cal)).joined(separator: ", ")
         field.placeholderString = "e.g. Dad, Ambrose"
         alert.accessoryView = field
         alert.addButton(withTitle: "Save")
@@ -299,7 +302,7 @@ final class MenuBarController {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        Preferences.setKeywords(words, for: cal.calendarIdentifier)
+        Preferences.setKeywords(words, for: key(for: cal))
         scheduler.refresh()
         rebuild()
     }
@@ -307,6 +310,18 @@ final class MenuBarController {
     private func settingsMenuItem() -> NSMenuItem {
         let item = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
         let sub = NSMenu()
+
+        // Launch at login.
+        let launch = ClosureMenuItem(title: "Launch at login") { [weak self] in
+            let now = Preferences.launchAtLogin
+            let applied = LoginItem.setEnabled(!now)
+            Preferences.launchAtLogin = applied
+            self?.rebuild()
+        }
+        launch.state = Preferences.launchAtLogin ? .on : .off
+        sub.addItem(launch)
+
+        sub.addItem(.separator())
 
         // Lead time.
         let leadLabel = NSMenuItem(title: "Show takeover before start", action: nil, keyEquivalent: "")

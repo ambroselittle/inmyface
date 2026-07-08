@@ -7,7 +7,7 @@ struct Meeting: Identifiable, Equatable {
     let title: String
     let start: Date
     let end: Date
-    let calendarID: String
+    let calendarKey: String   // stable "account › name" key for settings
     let calendarTitle: String
     let calendarColor: String // hex, best effort
     let joinURL: URL?
@@ -25,8 +25,9 @@ extension Meeting {
         self.title = (event.title?.isEmpty == false ? event.title! : "(No title)")
         self.start = start
         self.end = event.endDate ?? start.addingTimeInterval(1800)
-        self.calendarID = event.calendar?.calendarIdentifier ?? ""
-        self.calendarTitle = event.calendar?.title ?? "Calendar"
+        let calTitle = event.calendar?.title ?? "Calendar"
+        self.calendarKey = Preferences.calendarKey(source: event.calendar?.source?.title, title: calTitle)
+        self.calendarTitle = calTitle
         self.calendarColor = event.calendar?.color?.hexString ?? "#4C8BF5"
         self.location = event.location?.isEmpty == false ? event.location : nil
         self.joinURL = MeetingLink.find(in: event)
@@ -46,7 +47,7 @@ extension Meeting {
             title: title,
             start: start,
             end: start.addingTimeInterval(1800),
-            calendarID: "sample",
+            calendarKey: "sample›\(title)",
             calendarTitle: "Work",
             calendarColor: color,
             joinURL: joinable ? URL(string: "https://meet.google.com/sample-abc-def") : nil,
