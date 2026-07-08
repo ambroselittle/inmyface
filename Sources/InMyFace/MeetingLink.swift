@@ -2,69 +2,112 @@ import Foundation
 import EventKit
 import AppKit
 
-/// Extracts a join URL from a calendar event, checking the structured URL,
-/// then the notes/body, then the location field.
+/// Extracts a *video-conferencing* join URL from a calendar event. Only known
+/// conferencing hosts are ever returned — a generic link on the event (a
+/// Facebook event page, a doc, a maps link) must never be offered as "Join".
 enum MeetingLink {
-    /// Ordered so the most specific / most common providers win.
-    private static let patterns: [String] = [
-        #"https://[a-z0-9-]+\.zoom\.us/j/[^\s<>"')]+"#,
-        #"https://[a-z0-9-]*\.?zoom\.us/[^\s<>"')]+"#,
-        #"https://meet\.google\.com/[a-z0-9-]+"#,
-        #"https://teams\.microsoft\.com/l/meetup-join/[^\s<>"')]+"#,
-        #"https://teams\.live\.com/meet/[^\s<>"')]+"#,
-        #"https://[a-z0-9-]+\.webex\.com/[^\s<>"')]+"#,
-        #"https://[a-z0-9-]+\.whereby\.com/[^\s<>"')]+"#,
-        #"https://app\.gather\.town/[^\s<>"')]+"#,
-        #"https://[a-z0-9-]+\.around\.co/[^\s<>"')]+"#,
+    /// Known conferencing host suffixes. Subdomains match automatically, so
+    /// "zoom.us" also covers "acme.zoom.us".
+    private static let conferencingHosts: [String] = [
+        "zoom.us",
+        "zoomgov.com",
+        "meet.google.com",
+        "teams.microsoft.com",
+        "teams.live.com",
+        "webex.com",
+        "whereby.com",
+        "gotomeeting.com",
+        "gotomeet.me",
+        "bluejeans.com",
+        "chime.aws",
+        "jit.si",
+        "gather.town",
+        "around.co",
+        "8x8.vc",
+        "vowel.com",
+        "riverside.fm",
+        "meet.zoho.com",
+        "livestorm.co",
+        "demio.com",
+        "skype.com",
+    ]
+
+    /// Hosts that wrap the real link in a query param (link protection /
+    /// tracking redirects). We unwrap these to reach the actual meeting URL.
+    private static let redirectHosts: [String] = [
+        "safelinks.protection.outlook.com",
+        "google.com",
+        "urldefense.com",
+        "urldefense.proofpoint.com",
     ]
 
     static func find(in event: EKEvent) -> URL? {
-        // 1. Structured URL field (Google Calendar populates this for Meet).
-        if let url = event.url, isMeetingURL(url.absoluteString) {
-            return url
-        }
-        // 2. Notes / body.
-        if let notes = event.notes, let url = firstMatch(in: notes) {
-            return url
-        }
-        // 3. Location field (sometimes holds the Zoom/Meet link).
-        if let loc = event.location, let url = firstMatch(in: loc) {
-            return url
-        }
-        // 4. Fallback: any URL field at all (e.g. a generic https link).
-        if let url = event.url { return url }
+        // 1. The structured url field, if it's a conferencing link.
+        if let url = event.url, let c = conferencingURL(from: url) { return c }
+        // 2. First conferencing link in the notes/body.
+        if let notes = event.notes, let url = firstConferencingURL(in: notes) { return url }
+        // 3. The location field (Zoom links often live here).
+        if let loc = event.location, let url = firstConferencingURL(in: loc) { return url }
+        // No generic fallback on purpose — better no Join button than a wrong one.
         return nil
     }
 
-    private static func isMeetingURL(_ s: String) -> Bool {
-        firstMatch(in: s) != nil
+    /// Returns the (possibly unwrapped) URL if it points at a conferencing
+    /// host, else nil.
+    static func conferencingURL(from url: URL) -> URL? {
+        let resolved = unwrap(url)
+        return isConferencing(resolved) ? resolved : nil
     }
 
-    static func firstMatch(in text: String) -> URL? {
-        for pattern in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
-            let range = NSRange(text.startIndex..<text.endIndex, in: text)
-            if let match = regex.firstMatch(in: text, options: [], range: range),
-               let r = Range(match.range, in: text) {
-                var str = String(text[r])
-                // Trim trailing punctuation that regex may have grabbed.
-                while let last = str.last, ")].,>\"'".contains(last) {
-                    str.removeLast()
-                }
-                if let url = URL(string: str) { return url }
+    static func isConferencing(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        return conferencingHosts.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    /// Unwrap a link-protection / tracking redirect to its inner target.
+    private static func unwrap(_ url: URL) -> URL {
+        guard let host = url.host?.lowercased(),
+              redirectHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }),
+              let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url }
+        for key in ["url", "q", "u"] {
+            if let value = comps.queryItems?.first(where: { $0.name == key })?.value,
+               let inner = URL(string: value), inner.host != nil {
+                return inner
             }
         }
-        return nil
+        return url
+    }
+
+    /// Extract every link in the text (via the system link detector) and return
+    /// the first one that resolves to a conferencing host.
+    static func firstConferencingURL(in text: String) -> URL? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        var result: URL?
+        detector.enumerateMatches(in: text, options: [], range: range) { match, _, stop in
+            if let url = match?.url, let c = conferencingURL(from: url) {
+                result = c
+                stop.pointee = true
+            }
+        }
+        return result
     }
 
     /// A short human label for the provider, for the Join button.
     static func providerName(for url: URL) -> String {
         let host = url.host?.lowercased() ?? ""
-        if host.contains("zoom.us") { return "Zoom" }
+        if host.contains("zoom") { return "Zoom" }
         if host.contains("meet.google.com") { return "Google Meet" }
         if host.contains("teams.") { return "Teams" }
         if host.contains("webex.com") { return "Webex" }
         if host.contains("whereby.com") { return "Whereby" }
+        if host.contains("gotomeet") { return "GoToMeeting" }
+        if host.contains("bluejeans") { return "BlueJeans" }
+        if host.contains("jit.si") { return "Jitsi" }
+        if host.contains("chime.aws") { return "Chime" }
         return "Meeting"
     }
 }

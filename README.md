@@ -33,6 +33,17 @@ No Google Cloud project, no OAuth, no accounts.
 open dist/InMyFace.app
 ```
 
+For a **debug build** with a **Developer** menu (overlay previews, including the
+split layout, without waiting for a real meeting):
+
+```
+./scripts/build.sh debug
+open dist/InMyFace.app
+```
+
+The Developer menu is compiled in only for debug builds (`DEVELOPER` flag in
+`Package.swift`), so release builds stay clean.
+
 First launch: macOS asks for **Calendar** access — allow it. If you ever miss
 the prompt, use the menubar → **Open Privacy Settings…**.
 

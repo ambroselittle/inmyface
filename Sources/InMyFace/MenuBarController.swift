@@ -24,26 +24,24 @@ final class MenuBarController {
     private let scheduler: MeetingScheduler
     private let calendar: CalendarService
     private let onJoin: (Meeting) -> Void
-    private let onPresent: (Meeting) -> Void
+    private let icon = NSImage(systemSymbolName: "person.2.wave.2.fill",
+                               accessibilityDescription: "InMyFace")
+
+    /// A meeting starting within this window counts as "near" for the
+    /// minutes-when-imminent menubar style.
+    private let imminentWindow: TimeInterval = 15 * 60
 
     /// Offer these as quick "remind me in N min" choices.
     private let nudgeChoices = [1, 5, 10, 15, 30]
 
     init(scheduler: MeetingScheduler,
          calendar: CalendarService,
-         onJoin: @escaping (Meeting) -> Void,
-         onPresent: @escaping (Meeting) -> Void) {
+         onJoin: @escaping (Meeting) -> Void) {
         self.scheduler = scheduler
         self.calendar = calendar
         self.onJoin = onJoin
-        self.onPresent = onPresent
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "person.2.wave.2.fill",
-                                   accessibilityDescription: "InMyFace")
-            button.imagePosition = .imageLeading
-        }
         rebuild()
     }
 
@@ -71,15 +69,26 @@ final class MenuBarController {
             return
         }
 
-        // Header.
-        if let next = meetings.first {
-            let header = NSMenuItem(title: nextHeader(next), action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-        } else {
+        // Header: distinguish meetings happening now from the next one up.
+        let now = Date()
+        let ongoing = meetings.filter { $0.start <= now && now < $0.end }
+        let upcoming = meetings.filter { $0.start > now }
+
+        if ongoing.isEmpty && upcoming.isEmpty {
             let none = NSMenuItem(title: "No upcoming meetings", action: nil, keyEquivalent: "")
             none.isEnabled = false
             menu.addItem(none)
+        } else {
+            for m in ongoing.prefix(2) {
+                let item = NSMenuItem(title: happeningHeader(m), action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+            }
+            if let next = upcoming.first {
+                let item = NSMenuItem(title: nextHeader(next), action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+            }
         }
 
         // Active custom nudges.
@@ -117,6 +126,11 @@ final class MenuBarController {
         menu.addItem(ClosureMenuItem(title: "Refresh now") { [weak self] in
             self?.scheduler.refresh()
         })
+
+        #if DEVELOPER
+        menu.addItem(developerMenuItem())
+        #endif
+
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem(title: "Quit InMyFace", keyEquivalent: "q") {
             NSApp.terminate(nil)
@@ -124,6 +138,46 @@ final class MenuBarController {
 
         statusItem.menu = menu
     }
+
+    #if DEVELOPER
+    /// Debug-only overlay previews so we can eyeball the takeover (including
+    /// the split layout) without waiting for a real meeting.
+    private func developerMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Developer", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+
+        sub.addItem(ClosureMenuItem(title: "Preview single (sample)") { [weak self] in
+            self?.scheduler.presentNow([Meeting.sample(offset: 45, joinable: true)])
+        })
+        sub.addItem(ClosureMenuItem(title: "Preview split — 2 samples") { [weak self] in
+            self?.scheduler.presentNow([
+                Meeting.sample(title: "Design Review", offset: 45, joinable: true, color: "#4C8BF5"),
+                Meeting.sample(title: "1:1 with Mauricio", offset: 45, joinable: true, color: "#34A853")
+            ])
+        })
+        sub.addItem(ClosureMenuItem(title: "Preview split — 3 samples") { [weak self] in
+            self?.scheduler.presentNow([
+                Meeting.sample(title: "Standup", offset: 45, joinable: true, color: "#4C8BF5"),
+                Meeting.sample(title: "Design Review", offset: 45, joinable: true, color: "#34A853"),
+                Meeting.sample(title: "Roadmap", offset: 45, joinable: true, color: "#EA4335")
+            ])
+        })
+
+        sub.addItem(.separator())
+        sub.addItem(ClosureMenuItem(title: "Preview next real event") { [weak self] in
+            if let next = self?.scheduler.meetings.first {
+                self?.scheduler.presentNow([next])
+            }
+        })
+        sub.addItem(ClosureMenuItem(title: "Preview next 2 real as split") { [weak self] in
+            let next = Array(self?.scheduler.meetings.prefix(2) ?? [])
+            self?.scheduler.presentNow(next)
+        })
+
+        item.submenu = sub
+        return item
+    }
+    #endif
 
     // MARK: - Building blocks
 
@@ -138,11 +192,8 @@ final class MenuBarController {
             sub.addItem(ClosureMenuItem(title: "Join now") { [weak self] in
                 self?.onJoin(meeting)
             })
+            sub.addItem(.separator())
         }
-        sub.addItem(ClosureMenuItem(title: "Show takeover now") { [weak self] in
-            self?.onPresent(meeting)
-        })
-        sub.addItem(.separator())
         let remindLabel = NSMenuItem(title: "Remind me in…", action: nil, keyEquivalent: "")
         remindLabel.isEnabled = false
         sub.addItem(remindLabel)
@@ -296,6 +347,46 @@ final class MenuBarController {
         onlyJoinable.state = Preferences.onlyJoinable ? .on : .off
         sub.addItem(onlyJoinable)
 
+        sub.addItem(.separator())
+
+        // Sound.
+        let soundToggle = ClosureMenuItem(title: "Play a sound on takeover") { [weak self] in
+            Preferences.soundEnabled.toggle()
+            self?.rebuild()
+        }
+        soundToggle.state = Preferences.soundEnabled ? .on : .off
+        sub.addItem(soundToggle)
+
+        let soundItem = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
+        let soundSub = NSMenu()
+        for name in Preferences.availableSounds {
+            // Selecting a sound also previews it.
+            let choice = ClosureMenuItem(title: "  \(name)") { [weak self] in
+                Preferences.soundName = name
+                NSSound(named: name)?.play()
+                self?.rebuild()
+            }
+            choice.state = (Preferences.soundName == name) ? .on : .off
+            soundSub.addItem(choice)
+        }
+        soundItem.submenu = soundSub
+        sub.addItem(soundItem)
+
+        sub.addItem(.separator())
+
+        // Menu bar appearance.
+        let menubarLabel = NSMenuItem(title: "Menu bar shows", action: nil, keyEquivalent: "")
+        menubarLabel.isEnabled = false
+        sub.addItem(menubarLabel)
+        for style in Preferences.MenubarStyle.allCases {
+            let choice = ClosureMenuItem(title: "  \(style.label)") { [weak self] in
+                Preferences.menubarStyle = style
+                self?.rebuild()
+            }
+            choice.state = (Preferences.menubarStyle == style) ? .on : .off
+            sub.addItem(choice)
+        }
+
         item.submenu = sub
         return item
     }
@@ -304,10 +395,25 @@ final class MenuBarController {
 
     private func updateStatusTitle() {
         guard let button = statusItem.button else { return }
-        if let next = scheduler.meetings.first {
-            button.title = " " + TimeFormat.menubar(to: next.start)
-        } else {
+        button.imagePosition = .imageLeading
+
+        switch Preferences.menubarStyle {
+        case .iconOnly:
+            button.image = icon
             button.title = ""
+        case .dayOfMonth:
+            // Just the date number, no icon — compact, In-Your-Face style.
+            button.image = nil
+            button.title = "\(Calendar.current.component(.day, from: Date()))"
+        case .imminentMinutes:
+            button.image = icon
+            if let next = scheduler.meetings.first,
+               next.start.timeIntervalSinceNow > 0,
+               next.start.timeIntervalSinceNow <= imminentWindow {
+                button.title = " " + TimeFormat.menubar(to: next.start)
+            } else {
+                button.title = ""
+            }
         }
     }
 
@@ -317,5 +423,9 @@ final class MenuBarController {
 
     private func nextHeader(_ meeting: Meeting) -> String {
         "Next: \(meeting.title) — \(TimeFormat.relative(to: meeting.start))"
+    }
+
+    private func happeningHeader(_ meeting: Meeting) -> String {
+        "● Happening now: \(meeting.title) — ends \(TimeFormat.relative(to: meeting.end))"
     }
 }

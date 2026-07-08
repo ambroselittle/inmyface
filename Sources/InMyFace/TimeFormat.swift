@@ -2,21 +2,21 @@ import Foundation
 
 /// Human-friendly time formatting shared by the overlay and the menu.
 enum TimeFormat {
-    /// Big ticking countdown. Under an hour it's MM:SS (so the seconds tick
-    /// near start); further out it rolls up to hours, then days.
+    /// Big ticking countdown. Before start it counts down (MM:SS near start,
+    /// rolling up to hours/days further out). Once the meeting has begun it
+    /// reads as elapsed time, e.g. "Started 12m 41s ago".
     static func countdown(to date: Date) -> String {
         let total = Int(date.timeIntervalSinceNow)
-        let past = total < 0
-        let s = abs(total)
-        let body: String
-        if s >= 86_400 {
-            body = "\(s / 86_400)d \((s % 86_400) / 3_600)h"
-        } else if s >= 3_600 {
-            body = "\(s / 3_600)h \((s % 3_600) / 60)m"
+        if total >= 0 {
+            if total >= 86_400 { return "\(total / 86_400)d \((total % 86_400) / 3_600)h" }
+            if total >= 3_600 { return "\(total / 3_600)h \((total % 3_600) / 60)m" }
+            return String(format: "%02d:%02d", total / 60, total % 60)
         } else {
-            body = String(format: "%02d:%02d", s / 60, s % 60)
+            let s = -total
+            if s >= 3_600 { return "Started \(s / 3_600)h \((s % 3_600) / 60)m ago" }
+            if s >= 60 { return "Started \(s / 60)m \(s % 60)s ago" }
+            return "Started \(s)s ago"
         }
-        return past ? "-\(body)" : body
     }
 
     /// Compact relative phrase: "now", "in 5 min", "in 2h 15m", "1d 3h ago".

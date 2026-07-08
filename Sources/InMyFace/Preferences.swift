@@ -10,6 +10,57 @@ enum Preferences {
         static let onlyJoinable = "onlyJoinableMeetings"
         static let enabledCalendarIDs = "enabledCalendarIDs"
         static let calendarKeywords = "calendarKeywords"
+        static let menubarStyle = "menubarStyle"
+        static let soundEnabled = "soundEnabled"
+        static let soundName = "soundName"
+        static let dismissedMeetingIDs = "dismissedMeetingIDs"
+    }
+
+    /// Per-occurrence meeting IDs the user has already acted on (joined or
+    /// dismissed), persisted so a restart or rebuild doesn't re-nag about a
+    /// meeting that's still within its grace window.
+    static var dismissedMeetingIDs: Set<String> {
+        get { Set(defaults.stringArray(forKey: Key.dismissedMeetingIDs) ?? []) }
+        set { defaults.set(Array(newValue), forKey: Key.dismissedMeetingIDs) }
+    }
+
+    /// Whether to play a sound when the takeover appears. Default on.
+    static var soundEnabled: Bool {
+        get { defaults.object(forKey: Key.soundEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.soundEnabled) }
+    }
+
+    /// Named macOS system sound played on takeover.
+    static var soundName: String {
+        get { defaults.string(forKey: Key.soundName) ?? "Glass" }
+        set { defaults.set(newValue, forKey: Key.soundName) }
+    }
+
+    /// The standard macOS system sounds (in /System/Library/Sounds).
+    static let availableSounds = [
+        "Glass", "Hero", "Ping", "Blow", "Bottle", "Frog",
+        "Funk", "Morse", "Pop", "Purr", "Sosumi", "Submarine", "Tink"
+    ]
+
+    /// What the status-bar item shows. Kept minimal — most users already have
+    /// the clock/date in the menu bar, so the default is just an icon.
+    enum MenubarStyle: String, CaseIterable {
+        case iconOnly          // just the icon, no text
+        case imminentMinutes   // icon; adds minutes only when a meeting is close
+        case dayOfMonth        // today's date number, In-Your-Face style
+
+        var label: String {
+            switch self {
+            case .iconOnly: return "Icon only"
+            case .imminentMinutes: return "Minutes (only when meeting is near)"
+            case .dayOfMonth: return "Day of month"
+            }
+        }
+    }
+
+    static var menubarStyle: MenubarStyle {
+        get { MenubarStyle(rawValue: defaults.string(forKey: Key.menubarStyle) ?? "") ?? .iconOnly }
+        set { defaults.set(newValue.rawValue, forKey: Key.menubarStyle) }
     }
 
     /// How many seconds before start the takeover appears. Default 60s.

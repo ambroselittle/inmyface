@@ -9,10 +9,16 @@ CONFIG="${1:-release}"
 APP_NAME="InMyFace"
 APP="dist/${APP_NAME}.app"
 
-# Build a universal binary so the .app runs on both Apple Silicon and Intel.
-ARCHS=(--arch arm64 --arch x86_64)
+# Release ships a universal binary (Apple Silicon + Intel). Debug builds stay
+# native-arch for speed and carry the DEVELOPER flag (see Package.swift).
+if [[ "$CONFIG" == "release" ]]; then
+    ARCHS=(--arch arm64 --arch x86_64)
+    echo "==> Building (release, universal)…"
+else
+    ARCHS=()
+    echo "==> Building ($CONFIG, native, DEVELOPER menu on)…"
+fi
 
-echo "==> Building ($CONFIG, universal)…"
 swift build -c "$CONFIG" "${ARCHS[@]}"
 
 BIN="$(swift build -c "$CONFIG" "${ARCHS[@]}" --show-bin-path)/${APP_NAME}"

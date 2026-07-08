@@ -11,8 +11,16 @@ let package = Package(
             name: "InMyFace",
             path: "Sources/InMyFace",
             swiftSettings: [
-                .swiftLanguageMode(.v5)
+                .swiftLanguageMode(.v5),
+                // Debug builds get a Developer menu with overlay previews;
+                // release builds (what we distribute) don't.
+                .define("DEVELOPER", .when(configuration: .debug))
             ]
+        ),
+        .testTarget(
+            name: "InMyFaceTests",
+            dependencies: ["InMyFace"],
+            path: "Tests/InMyFaceTests"
         )
     ]
 )

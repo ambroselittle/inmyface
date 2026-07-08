@@ -1,20 +1,28 @@
 import AppKit
 import SwiftUI
 
+/// Borderless windows refuse key status by default, which would kill the
+/// Enter-to-join / Esc-to-dismiss keyboard shortcuts. Force it.
+final class KeyableWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 /// Presents the takeover across every screen. The primary screen shows the
 /// interactive content; other screens get a matching dim so nothing peeks
 /// through on a multi-monitor setup.
 @MainActor
 final class OverlayController {
     private var windows: [NSWindow] = []
+    private var keyMonitor: Any?
     private(set) var isVisible = false
 
-    func present(meeting: Meeting,
+    func present(meetings: [Meeting],
                  snoozeMinutes: Int,
-                 onJoin: @escaping () -> Void,
+                 onJoin: @escaping (Meeting) -> Void,
                  onSnooze: @escaping () -> Void,
                  onDismiss: @escaping () -> Void) {
-        guard !isVisible else { return }
+        guard !isVisible, !meetings.isEmpty else { return }
         isVisible = true
 
         let primary = NSScreen.main ?? NSScreen.screens.first
@@ -23,9 +31,9 @@ final class OverlayController {
             let window = makeWindow(on: screen)
             if isPrimary {
                 let root = OverlayView(
-                    meeting: meeting,
+                    meetings: meetings,
                     snoozeMinutes: snoozeMinutes,
-                    onJoin: { [weak self] in self?.close(); onJoin() },
+                    onJoin: { [weak self] meeting in self?.close(); onJoin(meeting) },
                     onSnooze: { [weak self] in self?.close(); onSnooze() },
                     onDismiss: { [weak self] in self?.close(); onDismiss() }
                 )
@@ -43,10 +51,30 @@ final class OverlayController {
 
         NSApp.activate(ignoringOtherApps: true)
         windows.first?.makeKeyAndOrderFront(nil)
+
+        // Capture Esc (dismiss) and Return (join primary) at the AppKit level —
+        // more reliable than SwiftUI focus on a borderless takeover window.
+        let primaryMeeting = meetings.first(where: { $0.isJoinable })
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.isVisible else { return event }
+            switch event.keyCode {
+            case 53: // Escape
+                self.close(); onDismiss(); return nil
+            case 36, 76: // Return / keypad Enter
+                if let primaryMeeting { self.close(); onJoin(primaryMeeting); return nil }
+                return event
+            default:
+                return event
+            }
+        }
+
+        if Preferences.soundEnabled {
+            NSSound(named: Preferences.soundName)?.play()
+        }
     }
 
     private func makeWindow(on screen: NSScreen) -> NSWindow {
-        let window = NSWindow(
+        let window = KeyableWindow(
             contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
@@ -67,6 +95,7 @@ final class OverlayController {
     func close() {
         guard isVisible else { return }
         isVisible = false
+        if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
         for w in windows { w.orderOut(nil) }
         windows.removeAll()
     }
