@@ -48,7 +48,9 @@ final class CalendarService {
     /// calendars the user has enabled.
     func upcomingMeetings(within hours: Double = 24) -> [Meeting] {
         guard access == .granted else { return [] }
-        let enabled = allCalendars().filter { Preferences.isCalendarEnabled($0.calendarIdentifier) }
+        let enabled = allCalendars().filter {
+            Preferences.isCalendarEnabled(Preferences.calendarKey(source: $0.source?.title, title: $0.title))
+        }
         guard !enabled.isEmpty else { return [] }
         let now = Date()
         let end = now.addingTimeInterval(hours * 3600)
@@ -60,7 +62,7 @@ final class CalendarService {
             .filter { !$0.isAllDay }
             .filter { ($0.endDate ?? .distantPast) > now }   // hasn't fully ended
             .map(Meeting.init(event:))
-            .filter { Preferences.titlePassesFilter($0.title, calendarID: $0.calendarID) }
+            .filter { Preferences.titlePassesFilter($0.title, calendarKey: $0.calendarKey) }
             .sorted { $0.start < $1.start }
     }
 }
