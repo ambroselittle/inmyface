@@ -33,6 +33,17 @@ No Google Cloud project, no OAuth, no accounts.
 open dist/InMyFace.app
 ```
 
+Or with [`just`](https://github.com/casey/just) (`brew install just`):
+
+```
+just build      # build the release .app
+just update     # pull latest, rebuild, and restart the running app
+just restart    # rebuild + restart without pulling
+just build-dev  # debug build with the Developer menu
+just test       # run tests
+just package     # zip a distributable bundle
+```
+
 For a **debug build** with a **Developer** menu (overlay previews, including the
 split layout, without waiting for a real meeting):
 
