@@ -69,15 +69,26 @@ final class MenuBarController {
             return
         }
 
-        // Header.
-        if let next = meetings.first {
-            let header = NSMenuItem(title: nextHeader(next), action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-        } else {
+        // Header: distinguish meetings happening now from the next one up.
+        let now = Date()
+        let ongoing = meetings.filter { $0.start <= now && now < $0.end }
+        let upcoming = meetings.filter { $0.start > now }
+
+        if ongoing.isEmpty && upcoming.isEmpty {
             let none = NSMenuItem(title: "No upcoming meetings", action: nil, keyEquivalent: "")
             none.isEnabled = false
             menu.addItem(none)
+        } else {
+            for m in ongoing.prefix(2) {
+                let item = NSMenuItem(title: happeningHeader(m), action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+            }
+            if let next = upcoming.first {
+                let item = NSMenuItem(title: nextHeader(next), action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+            }
         }
 
         // Active custom nudges.
@@ -412,5 +423,9 @@ final class MenuBarController {
 
     private func nextHeader(_ meeting: Meeting) -> String {
         "Next: \(meeting.title) — \(TimeFormat.relative(to: meeting.start))"
+    }
+
+    private func happeningHeader(_ meeting: Meeting) -> String {
+        "● Happening now: \(meeting.title) — ends \(TimeFormat.relative(to: meeting.end))"
     }
 }
