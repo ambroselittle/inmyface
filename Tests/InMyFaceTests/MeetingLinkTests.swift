@@ -42,6 +42,26 @@ final class MeetingLinkTests: XCTestCase {
         XCTAssertEqual(resolved?.host, "us02web.zoom.us")
     }
 
+    // A custom-domain link under a "Video Call" label (e.g. the St. Isaac the
+    // Syrian meeting's philokalia.link) is not a known conferencing host, but
+    // the label makes it a valid join target.
+    func testLabeledCustomDomainVideoCall() {
+        let notes = "----( Video Call )----\nhttps://philokalia.link/climacus\n---===---"
+        XCTAssertNil(MeetingLink.firstConferencingURL(in: notes)) // unknown host, not tier 1
+        XCTAssertEqual(MeetingLink.labeledURL(in: notes)?.absoluteString, "https://philokalia.link/climacus")
+    }
+
+    func testLabeledInlineCue() {
+        let notes = "Join the meeting: https://rooms.example.org/abc123"
+        XCTAssertEqual(MeetingLink.labeledURL(in: notes)?.absoluteString, "https://rooms.example.org/abc123")
+    }
+
+    // A bare event/RSVP link with no video-call cue must NOT be grabbed.
+    func testLabeledIgnoresUncuedLinks() {
+        XCTAssertNil(MeetingLink.labeledURL(in: "RSVP here: https://www.facebook.com/events/42"))
+        XCTAssertNil(MeetingLink.labeledURL(in: "Join us for drinks! https://www.facebook.com/events/42"))
+    }
+
     func testProviderNames() {
         XCTAssertEqual(MeetingLink.providerName(for: URL(string: "https://us02web.zoom.us/j/1")!), "Zoom")
         XCTAssertEqual(MeetingLink.providerName(for: URL(string: "https://meet.google.com/x")!), "Google Meet")
