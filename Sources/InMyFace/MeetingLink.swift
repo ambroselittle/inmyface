@@ -41,15 +41,59 @@ enum MeetingLink {
         "urldefense.proofpoint.com",
     ]
 
+    /// Phrases that, sitting next to a URL in the notes, mark it as a join link
+    /// even when the host isn't a recognized conferencing domain (custom
+    /// domains, self-hosted rooms, call link-shorteners). Deliberately specific
+    /// — bare "join" is excluded so an RSVP/event link isn't misread.
+    private static let videoCallCues: [String] = [
+        "video call", "video conference", "videocall",
+        "join the meeting", "join meeting", "join the call", "join call",
+        "meeting link", "meeting url", "conference link", "call link",
+        "join zoom", "join microsoft teams", "join google meet",
+        "dial-in", "dial in", "webinar",
+    ]
+
     static func find(in event: EKEvent) -> URL? {
-        // 1. The structured url field, if it's a conferencing link.
+        // 1. The structured url field, if it's a known conferencing link.
         if let url = event.url, let c = conferencingURL(from: url) { return c }
-        // 2. First conferencing link in the notes/body.
+        // 2. First known conferencing link in the notes/body.
         if let notes = event.notes, let url = firstConferencingURL(in: notes) { return url }
         // 3. The location field (Zoom links often live here).
         if let loc = event.location, let url = firstConferencingURL(in: loc) { return url }
-        // No generic fallback on purpose — better no Join button than a wrong one.
+        // 4. A URL explicitly labeled as a video call, even on an unknown host.
+        if let notes = event.notes, let url = labeledURL(in: notes) { return url }
+        if let loc = event.location, let url = labeledURL(in: loc) { return url }
+        // No blind fallback — better no Join button than a wrong one.
         return nil
+    }
+
+    /// A URL in the text that appears on or just after a line containing a
+    /// video-call cue. Returned as-is (custom short-links resolve in-browser).
+    static func labeledURL(in text: String) -> URL? {
+        var window = 0
+        for line in text.components(separatedBy: .newlines) {
+            let lower = line.lowercased()
+            if videoCallCues.contains(where: { lower.contains($0) }) { window = 3 }
+            if window > 0, let url = firstURL(in: line) { return url }
+            if window > 0 { window -= 1 }
+        }
+        return nil
+    }
+
+    /// First http(s) URL in a string, via the system link detector.
+    private static func firstURL(in text: String) -> URL? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        var result: URL?
+        detector.enumerateMatches(in: text, options: [], range: range) { match, _, stop in
+            if let url = match?.url, url.scheme?.hasPrefix("http") == true {
+                result = url
+                stop.pointee = true
+            }
+        }
+        return result
     }
 
     /// Returns the (possibly unwrapped) URL if it points at a conferencing
