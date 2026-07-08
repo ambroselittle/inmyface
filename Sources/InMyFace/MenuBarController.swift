@@ -122,11 +122,6 @@ final class MenuBarController {
         menu.addItem(calendarsMenuItem())
         menu.addItem(settingsMenuItem())
 
-        // Refresh + Quit.
-        menu.addItem(ClosureMenuItem(title: "Refresh now") { [weak self] in
-            self?.scheduler.refresh()
-        })
-
         #if DEVELOPER
         menu.addItem(developerMenuItem())
         #endif
@@ -152,7 +147,7 @@ final class MenuBarController {
         sub.addItem(ClosureMenuItem(title: "Preview split — 2 samples") { [weak self] in
             self?.scheduler.presentNow([
                 Meeting.sample(title: "Design Review", offset: 45, joinable: true, color: "#4C8BF5"),
-                Meeting.sample(title: "1:1 with Mauricio", offset: 45, joinable: true, color: "#34A853")
+                Meeting.sample(title: "1:1 Sync", offset: 45, joinable: true, color: "#34A853")
             ])
         })
         sub.addItem(ClosureMenuItem(title: "Preview split — 3 samples") { [weak self] in
@@ -172,6 +167,11 @@ final class MenuBarController {
         sub.addItem(ClosureMenuItem(title: "Preview next 2 real as split") { [weak self] in
             let next = Array(self?.scheduler.meetings.prefix(2) ?? [])
             self?.scheduler.presentNow(next)
+        })
+
+        sub.addItem(.separator())
+        sub.addItem(ClosureMenuItem(title: "Refresh calendars now") { [weak self] in
+            self?.scheduler.refresh()
         })
 
         item.submenu = sub
@@ -289,7 +289,7 @@ final class MenuBarController {
         alert.informativeText = "Only events whose title contains one of these words will alert. Separate with commas. Leave blank to alert on all events in this calendar."
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         field.stringValue = Preferences.keywords(for: key(for: cal)).joined(separator: ", ")
-        field.placeholderString = "e.g. Dad, Ambrose"
+        field.placeholderString = "e.g. standup, 1:1, review"
         alert.accessoryView = field
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
