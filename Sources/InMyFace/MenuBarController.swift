@@ -346,7 +346,7 @@ final class MenuBarController {
         let snoozeLabel = NSMenuItem(title: "Snooze length", action: nil, keyEquivalent: "")
         snoozeLabel.isEnabled = false
         sub.addItem(snoozeLabel)
-        for m in [5, 10, 15] {
+        for m in [1, 5, 10, 15] {
             let choice = ClosureMenuItem(title: "  \(m) min") { [weak self] in
                 Preferences.snoozeMinutes = m
                 self?.rebuild()
