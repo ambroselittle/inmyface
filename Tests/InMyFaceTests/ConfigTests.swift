@@ -1,8 +1,11 @@
-import XCTest
+import Foundation
+import Testing
 @testable import InMyFace
 
-final class ConfigTests: XCTestCase {
+@Suite("Config")
+struct ConfigTests {
 
+    @Test
     func testRoundTrip() throws {
         var cfg = Config()
         cfg.leadTimeSeconds = 120
@@ -17,42 +20,46 @@ final class ConfigTests: XCTestCase {
 
         let data = try JSONEncoder().encode(cfg)
         let decoded = try JSONDecoder().decode(Config.self, from: data)
-        XCTAssertEqual(cfg, decoded)
+        #expect(cfg == decoded)
     }
 
     // Older / partial files must decode, filling every missing field with its
     // default rather than throwing.
+    @Test
     func testPartialDecodeUsesDefaults() throws {
         let json = #"{ "soundName": "Ping", "disabledCalendars": ["iCloud›Fam"] }"#
         let cfg = try JSONDecoder().decode(Config.self, from: Data(json.utf8))
-        XCTAssertEqual(cfg.soundName, "Ping")
-        XCTAssertEqual(cfg.disabledCalendars, ["iCloud›Fam"])
+        #expect(cfg.soundName == "Ping")
+        #expect(cfg.disabledCalendars == ["iCloud›Fam"])
         // Untouched fields fall back to defaults.
-        XCTAssertEqual(cfg.leadTimeSeconds, 60)
-        XCTAssertEqual(cfg.snoozeMinutes, 5)
-        XCTAssertEqual(cfg.menubarStyle, "iconOnly")
-        XCTAssertTrue(cfg.soundEnabled)
-        XCTAssertFalse(cfg.launchAtLogin)
+        #expect(cfg.leadTimeSeconds == 60)
+        #expect(cfg.snoozeMinutes == 5)
+        #expect(cfg.menubarStyle == "iconOnly")
+        #expect(cfg.soundEnabled)
+        #expect(!cfg.launchAtLogin)
     }
 
+    @Test
     func testEmptyJSONDecodesToDefaults() throws {
         let cfg = try JSONDecoder().decode(Config.self, from: Data("{}".utf8))
-        XCTAssertEqual(cfg, Config())
+        #expect(cfg == Config())
     }
 
+    @Test
     func testCalendarKeyFormat() {
-        XCTAssertEqual(Preferences.calendarKey(source: "iCloud", title: "Family"), "iCloud›Family")
+        #expect(Preferences.calendarKey(source: "iCloud", title: "Family") == "iCloud›Family")
         // Missing source falls back to a stable placeholder.
-        XCTAssertEqual(Preferences.calendarKey(source: nil, title: "Work"), "Other›Work")
+        #expect(Preferences.calendarKey(source: nil, title: "Work") == "Other›Work")
     }
 
+    @Test
     func testTitleMatching() {
         // No keywords → everything passes.
-        XCTAssertTrue(Preferences.titleMatches("Anything", keywords: []))
+        #expect(Preferences.titleMatches("Anything", keywords: []))
         // Case-insensitive substring.
-        XCTAssertTrue(Preferences.titleMatches("Lunch with Dad", keywords: ["Dad", "Ambrose"]))
-        XCTAssertTrue(Preferences.titleMatches("ambrose piano recital", keywords: ["Dad", "Ambrose"]))
+        #expect(Preferences.titleMatches("Lunch with Dad", keywords: ["Dad", "Ambrose"]))
+        #expect(Preferences.titleMatches("ambrose piano recital", keywords: ["Dad", "Ambrose"]))
         // No match → filtered out.
-        XCTAssertFalse(Preferences.titleMatches("Grocery run", keywords: ["Dad", "Ambrose"]))
+        #expect(!Preferences.titleMatches("Grocery run", keywords: ["Dad", "Ambrose"]))
     }
 }

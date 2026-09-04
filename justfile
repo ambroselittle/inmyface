@@ -29,7 +29,7 @@ restart:
 
 # Run the test suite.
 test:
-    swift test
+    ./scripts/test.sh
 
 # Build and zip a distributable bundle for copying to another Mac.
 package:
