@@ -24,6 +24,7 @@ final class MenuBarController {
     private let scheduler: MeetingScheduler
     private let calendar: CalendarService
     private let onJoin: (Meeting) -> Void
+    private let onTestAlert: () -> Void
     private let icon = NSImage(systemSymbolName: "person.2.wave.2.fill",
                                accessibilityDescription: "InMyFace")
 
@@ -36,10 +37,12 @@ final class MenuBarController {
 
     init(scheduler: MeetingScheduler,
          calendar: CalendarService,
-         onJoin: @escaping (Meeting) -> Void) {
+         onJoin: @escaping (Meeting) -> Void,
+         onTestAlert: @escaping () -> Void) {
         self.scheduler = scheduler
         self.calendar = calendar
         self.onJoin = onJoin
+        self.onTestAlert = onTestAlert
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         rebuild()
@@ -401,6 +404,11 @@ final class MenuBarController {
             choice.state = (Preferences.menubarStyle == style) ? .on : .off
             sub.addItem(choice)
         }
+
+        sub.addItem(.separator())
+        sub.addItem(ClosureMenuItem(title: "Test Alert") { [weak self] in
+            self?.onTestAlert()
+        })
 
         item.submenu = sub
         return item

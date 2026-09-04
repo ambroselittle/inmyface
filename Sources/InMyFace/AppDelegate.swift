@@ -13,7 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu = MenuBarController(
             scheduler: scheduler,
             calendar: calendar,
-            onJoin: { [weak self] meeting in self?.join(meeting) }
+            onJoin: { [weak self] meeting in self?.join(meeting) },
+            onTestAlert: { [weak self] in self?.showTestAlert() }
         )
 
         // Overlay ↔ scheduler wiring.
@@ -88,6 +89,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onDismiss: { [weak self] in
                 meetings.forEach { self?.scheduler.dismiss($0) }
             }
+        )
+    }
+
+    /// Show one real takeover without involving scheduler state. The synthetic
+    /// meeting exists only long enough to render the configured timing, snooze,
+    /// visual, and sound behavior; closing it cannot dismiss or snooze a real
+    /// calendar occurrence (or persist a fabricated occurrence ID).
+    private func showTestAlert() {
+        let meeting = Meeting.testAlert(
+            leadTimeSeconds: Preferences.leadTimeSeconds
+        )
+        overlay.present(
+            meetings: [meeting],
+            snoozeMinutes: Preferences.snoozeMinutes,
+            onJoin: { _ in },
+            onSnooze: {},
+            onDismiss: {}
         )
     }
 

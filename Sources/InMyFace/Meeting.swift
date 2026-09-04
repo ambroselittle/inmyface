@@ -32,6 +32,24 @@ extension Meeting {
         self.location = event.location?.isEmpty == false ? event.location : nil
         self.joinURL = MeetingLink.find(in: event)
     }
+
+    /// An ephemeral meeting used by Settings → Test Alert. Its start time is
+    /// offset by the configured lead time so the takeover previews the same
+    /// countdown a real alert would show, but it is never sent to the scheduler.
+    static func testAlert(now: Date = Date(), leadTimeSeconds: Int) -> Meeting {
+        let start = now.addingTimeInterval(TimeInterval(max(0, leadTimeSeconds)))
+        return Meeting(
+            id: "test-alert-\(UUID().uuidString)",
+            title: "Test Alert",
+            start: start,
+            end: start.addingTimeInterval(30 * 60),
+            calendarKey: "inmyface›test-alert",
+            calendarTitle: "InMyFace",
+            calendarColor: "#4C8BF5",
+            joinURL: nil,
+            location: nil
+        )
+    }
 }
 
 #if DEVELOPER
